@@ -9,9 +9,11 @@ use craft\base\Element;
 use craft\base\Plugin;
 use craft\events\DefineBehaviorsEvent;
 use craft\events\ElementEvent;
+use craft\events\IndexKeywordsEvent;
 use craft\events\RegisterComponentTypesEvent;
 use craft\helpers\ElementHelper;
 use craft\services\Elements;
+use craft\services\Search;
 use craft\services\Utilities;
 use craft\web\twig\variables\CraftVariable;
 use Exception;
@@ -71,8 +73,12 @@ class Scout extends Plugin
             $this->validateConfig();
             $this->registerBehaviors();
             $this->registerVariables();
-            $this->registerEventHandlers();
+            $this->registerElementEventHandlers();
             $this->registerUtility();
+
+            if ($this->getSettings()->enableSiteSearchIndex) {
+                $this->registerSiteSearchEventHandlers();
+            }
         });
     }
 
@@ -143,7 +149,7 @@ class Scout extends Plugin
         }
     }
 
-    private function registerEventHandlers(): void
+    private function registerElementEventHandlers(): void
     {
         $events = [
             [Elements::class, Elements::EVENT_AFTER_SAVE_ELEMENT],
@@ -240,5 +246,32 @@ class Scout extends Plugin
                 }
             }
         );
+    }
+
+    private function registerSiteSearchEventHandlers(): void
+    {
+        $client = SearchClient::create(
+            getenv('SCOUT_APP_KEY'),
+            getenv('SCOUT_API_KEY')
+        );
+        $requestOptions = ['createIfNotExists' => true];
+
+        \craft\base\Event::on(
+            Search::class,
+            Search::EVENT_BEFORE_INDEX_KEYWORDS,
+            function(IndexKeywordsEvent $event) use ($client, $requestOptions) {
+                $indexName = $this->getSettings()->siteSearchIndexPrefix . "_{$event->element->siteId}";
+                $index = $client->initIndex($indexName);
+                $data = [
+                        'objectID' => $event->element->id,
+                        $event->attribute => $event->keywords,
+                        'siteId' => $event->element->siteId,
+                    ];
+                $index->partialUpdateObject($data, $requestOptions)->wait();
+                try {
+                } catch (Exception $e) {
+                    \Craft::error($e->getMessage(), __CLASS__);
+                }
+            });
     }
 }

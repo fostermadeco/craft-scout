@@ -58,6 +58,13 @@ class Settings extends Model
     /** @var bool */
     public $useOriginalRecordIfSplitValueIsArrayOfOne = true;
 
+    /** @var bool */
+    public $enableSiteSearchIndex = false;
+
+    /** @var string */
+    public $siteSearchIndexPrefix = "ScoutSiteSearch";
+
+
     public function fields(): array
     {
         $fields = parent::fields();
