@@ -152,75 +152,78 @@ class Scout extends Plugin
             Event::on(
                 $event[0],
                 $event[1],
-                function (ElementEvent $event) {
-                    /** @var SearchableBehavior $element */
-                    $element = $event->element;
-
-                    if (!$element->hasMethod('searchable') || !$element->shouldBeSearchable()) {
-                        return;
-                    }
-
-                    if (Scout::$plugin->getSettings()->queue) {
-                        Craft::$app->getQueue()->push(
-                            new IndexElement(['id' => $element->id])
-                        );
-                    } else {
-                        $element->searchable();
-                    }
-                }
+                [$this, 'indexElement']
             );
         }
 
         Event::on(
             Elements::class,
             Elements::EVENT_BEFORE_DELETE_ELEMENT,
-            function (ElementEvent $event) {
-                if (!Scout::$plugin->getSettings()->indexRelations) {
-                    $this->beforeDeleteRelated = new Collection();
-
-                    return;
-                }
-
-                /** @var SearchableBehavior $element */
-                $element = $event->element;
-
-                if (!$element->hasMethod('searchable') || !$element->shouldBeSearchable()) {
-                    return;
-                }
-
-                // Only run this through the queue if the user has that enabled
-                if (Scout::$plugin->getSettings()->queue) {
-                    Craft::$app->getQueue()->push(
-                        new DeindexElement(['id' => $element->id])
-                    );
-                }
-            }
+            [$this, 'beforeDeleteElement']
         );
 
         Event::on(
             Elements::class,
             Elements::EVENT_AFTER_DELETE_ELEMENT,
-            function (ElementEvent $event) {
-                //Skip this step if we already ran the DeIndex function earlier
-                if (Scout::$plugin->getSettings()->queue) {
-                    return;
-                }
-
-                /** @var SearchableBehavior $element */
-                $element = $event->element;
-                if ($element->hasMethod('unsearchable')) {
-                    $element->unsearchable();
-                }
-
-                if ($this->beforeDeleteRelated) {
-                    $this->beforeDeleteRelated->each(function (Element $relatedElement) {
-                        /* @var SearchableBehavior $relatedElement */
-                        if ($relatedElement->hasMethod('searchable')) {
-                            $relatedElement->searchable(false);
-                        }
-                    });
-                }
-            }
+            [$this, 'afterDeleteElement']
         );
+    }
+    public function indexElement(ElementEvent $event) {
+        /** @var SearchableBehavior $element */
+        $element = $event->element;
+
+        if (!$element->hasMethod('searchable') || !$element->shouldBeSearchable()) {
+            return;
+        }
+
+        if (Scout::$plugin->getSettings()->queue) {
+            Craft::$app->getQueue()->push(
+                new IndexElement(['id' => $element->id])
+            );
+        } else {
+            $element->searchable();
+        }
+    }
+    public function beforeDeleteElement(ElementEvent $event) {
+        if (!Scout::$plugin->getSettings()->indexRelations) {
+            $this->beforeDeleteRelated = new Collection();
+
+            return;
+        }
+
+        /** @var SearchableBehavior $element */
+        $element = $event->element;
+
+        if (!$element->hasMethod('searchable') || !$element->shouldBeSearchable()) {
+            return;
+        }
+
+        // Only run this through the queue if the user has that enabled
+        if (Scout::$plugin->getSettings()->queue) {
+            Craft::$app->getQueue()->push(
+                new DeindexElement(['id' => $element->id])
+            );
+        }
+    }
+    public function afterDeleteElement(ElementEvent $event) {
+        //Skip this step if we already ran the DeIndex function earlier
+        if (Scout::$plugin->getSettings()->queue) {
+            return;
+        }
+
+        /** @var SearchableBehavior $element */
+        $element = $event->element;
+        if ($element->hasMethod('unsearchable')) {
+            $element->unsearchable();
+        }
+
+        if ($this->beforeDeleteRelated) {
+            $this->beforeDeleteRelated->each(function (Element $relatedElement) {
+                /* @var SearchableBehavior $relatedElement */
+                if ($relatedElement->hasMethod('searchable')) {
+                    $relatedElement->searchable(false);
+                }
+            });
+        }
     }
 }
